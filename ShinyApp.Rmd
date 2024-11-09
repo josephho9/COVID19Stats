@@ -1,0 +1,101 @@
+---
+title: "ShinyApp"
+output: html_document
+date: "2024-10-20"
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(include = FALSE)
+```
+
+
+```{r cars, include=FALSE}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(shiny)
+```
+
+```{r include=FALSE}
+covid_data = read_csv("owid-covid-data.csv")
+covid_data$date <- as.Date(covid_data$date, format = "%Y-%m-%d")
+covid_data<- covid_data %>% drop_na(total_cases, total_deaths)
+```
+
+
+```{r pressure, echo=TRUE}
+# Define the UI for the app
+ui <- fluidPage(
+    titlePanel("COVID-19 Cases and Deaths Visualization"),
+    
+    sidebarLayout(
+        sidebarPanel(
+            # Dropdown to select the continent
+            selectInput("continent", "Select Continent:", 
+                        choices = unique(covid_data$continent), 
+                        selected = "Europe"),
+            
+            # Dropdown to select the location (country)
+            uiOutput("locationUI"),
+            
+            # Slider for date range
+            sliderInput("dateRange", "Select Date Range:",
+                        min = min(covid_data$date), 
+                        max = max(covid_data$date),
+                        value = c(min(covid_data$date), max(covid_data$date)),
+                        timeFormat = "%Y-%m-%d")
+        ),
+        
+        mainPanel(
+            tabsetPanel(
+                tabPanel("Cases", plotOutput("casesPlot")),
+                tabPanel("Deaths", plotOutput("deathsPlot"))
+            )
+        )
+    )
+)
+
+# Define server logic
+server <- function(input, output, session) {
+    
+    # Reactive output for the location dropdown based on selected continent
+    output$locationUI <- renderUI({
+        locations <- covid_data %>%
+            filter(continent == input$continent) %>%
+            pull(location) %>%
+            unique()
+        
+        selectInput("location", "Select Country:", choices = locations)
+    })
+    
+    # Reactive data based on filters
+    filtered_data <- reactive({
+        covid_data %>%
+            filter(continent == input$continent,
+                   location == input$location,
+                   date >= input$dateRange[1] & date <= input$dateRange[2])
+    })
+    
+    # Plot for total cases
+    output$casesPlot <- renderPlot({
+        ggplot(filtered_data(), aes(x = date, y = total_cases)) +
+            geom_line(color = "blue") +
+            labs(title = paste("Total COVID-19 Cases in", input$location),
+                 x = "Date", y = "Total Cases") +
+            theme_minimal()
+    })
+    
+    # Plot for total deaths
+    output$deathsPlot <- renderPlot({
+        ggplot(filtered_data(), aes(x = date, y = total_deaths)) +
+            geom_line(color = "red") +
+            labs(title = paste("Total COVID-19 Deaths in", input$location),
+                 x = "Date", y = "Total Deaths") +
+            theme_minimal()
+    })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+```
